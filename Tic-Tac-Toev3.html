@@ -1,0 +1,1042 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>Tic Tac Foe</title>
+  <link rel="icon" href="Tic Tac Foe Icon.png">
+</head>
+
+<body bgcolor="#B71C2F">
+  <style type="text/css" media="screen">
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background-color: 'grey';
+    }
+  </style>
+  <canvas id="myCanvas" width="200" height="100" style="background-color:seagreen">\
+    Your browser does not support the canvas element.
+  </canvas>
+  <script>
+    //defines some variables
+    var canvas = document.getElementById("myCanvas");
+    var ctx = canvas.getContext("2d");
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    var w = canvas.width
+    var h = canvas.height
+    var gridx
+    var gridy
+    var gameplay
+    var outcome
+    var canplacemarker
+    var animate
+    var animatestep
+    var animatepos
+    var turn = "x"
+    var drawanimatestep
+    var losswaittime
+    var lossanimatespeed
+    var lossanimatestep
+    var winlineanimate
+    var lossanimatetime
+    var winlinespeed
+    var wait
+    var losswait
+    var shortest = h
+    if (w < h) {
+      shortest = w
+    }
+    var muted = false
+    var boardmargin = 100
+    shortest -= boardmargin
+    var gap = shortest / 20
+    var canreset = false
+    var markerbuffer = shortest / 15
+    var markerthickness = shortest / 25
+    var boardthickness = shortest / 30
+    //colours
+    var noughtcolour = "rgb(109,160,48)"
+    var crosscolour = "rgb(0,105,109)"
+    var boardcolour = "rgb(93,0,6)"
+    var backgroundcolour = "rgb(183,28,47)"
+    const complementcolour = "rgb(93,0,6)"
+    ctx.fillStyle = backgroundcolour
+    ctx.fillRect(0, 0, w, h);
+    //acceses localstrage to try to find number of draws and losses for an individual:
+    //checks if browser supports localstroage
+    var nodraws = 0
+    var nowins = 0
+    var nolosses = 0
+    var tonestarted = false
+    var started = false
+    if (typeof(Storage) !== "undefined") {
+      //if it does try to load draws, losses and win items
+      nodraws = localStorage.getItem("draws")
+      nowins = localStorage.getItem("wins")
+      nolosses = localStorage.getItem("losses")
+      //if it is not there set them to 0
+      if (nodraws == null) {
+        nodraws = 0
+      }
+      if (nowins == null) {
+        nowins = 0
+      }
+      if (nolosses == null) {
+        nolosses = 0
+      }
+    }
+    //small boards set up:
+    //smallboards[n] == x position
+    //smallboards[n+1] == y posistion
+    //smallboards[n+2] == rotation in degrees
+    //smallboards[n+3] == age of board
+    //smallboards[n+4] == rotational velocity
+    //where n%5 == 0
+    var smallboards = []
+    var maxnosmallboard = 20
+    var smallboardsize = 15
+    var boardlifespan = 150
+    var y_velocity = 1
+    var maxspin = 2
+    var infolength = 5
+    var timesincelast = 0
+    //varitation
+    const rotation0 = Math.floor(Math.random() * 4)
+    //currentboard[row][column]
+    //currentboard[y][x]
+    //"1" = nothing, "0" = nought, "x" = cross
+    //we are noughts and the user is crosses
+    var currentboard = [
+      ["1", "1", "1"],
+      ["1", "1", "1"],
+      ["1", "1", "1"]
+    ];
+    //steps for victory
+    //if you can win --> Win
+    //if they can win --> Block
+    //if they can fork -->block
+    //if you can fork --> fork
+    //if the center is free --> get
+    //if 0 on board --> make double with most options
+    //if no 0's --> place where most options are
+    var reset = function() {
+      gridx
+      gridy
+      canreset = false
+      gameplay = true
+      outcome = "none"
+      canplacemarker = true
+      animate = false
+      animatestep = 0
+      animatepos = []
+      /*if (turn == "x") {
+        turn = "0"
+      }else {
+        turn = "x"
+      }*/
+      drawanimatestep
+      losswaittime = 80
+      lossanimatespeed = 1
+      lossanimatestep
+      winlineanimate
+      lossanimatetime = 80
+      winlinespeed = 5
+      wait
+      losswait
+      currentboard = [
+        ["1", "1", "1"],
+        ["1", "1", "1"],
+        ["1", "1", "1"]
+      ];
+    }
+    reset()
+    var backgroundmusic = new Audio("bensound-deepblue.mp3")
+    //will find the nearly ideal move
+    var nextmove = function(gameboard) {
+      var finalresult = [];
+      //finds if 0 or x can win
+      var can0win = canwin(gameboard, "0")
+      var canxwin = canwin(gameboard, "x")
+      //finds if 0 or x can fork
+      var canxfork = checkfork(gameboard, "x")
+      var can0fork = checkfork(gameboard, "0")
+      //if the computor can win --> win
+      if (can0win[0]) {
+        finalresult[0] = can0win[1]
+        finalresult[1] = can0win[2]
+        //if the player can win --> block
+      } else if (canxwin[0]) {
+        finalresult[0] = canxwin[1]
+        finalresult[1] = canxwin[2]
+        //if the player can fork --> block
+      } else if (canxfork[0]) {
+        finalresult[0] = canxfork[1]
+        finalresult[1] = canxfork[2]
+        //if they can fork in multiple ways and the computor is in the center and the edges are free:
+      } else if (canxfork[1] > 1 && gameboard[1][1] == "0" && (gameboard[0][1] == "1" || gameboard[1][0] == "1" || gameboard[1][2] == "1" || gameboard[2][1] == "1")) {
+        //go in one of the edges
+        if (gameboard[0][1] == "1") {
+          finalresult = [0, 1]
+        } else if (gameboard[1][0] == "1") {
+          finalresult = [1, 0]
+        } else if (gameboard[1][2] = "1") {
+          finalresult = [1, 2]
+        } else {
+          finalresult = [2, 1]
+        }
+        //if they can fork in multiple ways and they are in the center and the corners are free:
+      } else if (canxfork[1] > 1 && gameboard[1][1] == "x" && (gameboard[0][0] == "1" || gameboard[0][2] == "1" || gameboard[2][2] == "1" || gameboard[2][0] == "1")) {
+        //go in corner
+        if (gameboard[0][0] == "1") {
+          finalresult = [0, 0]
+        } else if (gameboard[0][2] == "1") {
+          finalresult = [0, 2]
+        } else if (gameboard[2][2] = "1") {
+          finalresult = [2, 2]
+        } else {
+          finalresult = [2, 0]
+        }
+        //if we can fork --> fork
+      } else if (can0fork[0]) {
+        finalresult[0] = can0fork[1]
+        finalresult[1] = can0fork[2]
+        //if the center is free --> go in center
+      } else if (gameboard[1][1] == "1") {
+        finalresult = [1, 1]
+        //otherwise go in space with most options
+      } else {
+        finalresult = mostoption0(gameboard)
+      }
+      //if it's the computor's first turn
+      if (countempty(gameboard) >= 8) {
+        //randomly filp it's move to add variation
+        if (Math.random() >= 0.5) {
+          finalresult[0] = 2 - finalresult[0]
+        }
+        if (Math.random() >= 0.5) {
+          finalresult[1] = 2 - finalresult[1]
+        }
+      }
+      return finalresult
+    }
+    //a function which rotates the board (currently unused)
+    var rotateboard = function(gameboard0) {
+      var result5 = []
+      for (var ab = 2; ab >= 0; ab--) {
+        result5.push([gameboard0[0][ab], gameboard0[1][ab], gameboard0[2][ab]])
+      }
+      return result5
+    }
+
+
+
+    //finds if player("x" or "0") can win and the position that is needed to win
+    var canwin = function(board, player) {
+      //defines variables
+      var winposition = []
+      var typeofwin;
+      var possitionofwin;
+      var result = false
+      var count0s_d1 = 0
+      // defult set to true wrong
+      var possible_d1 = true
+      var count0s_d2 = 0
+      var possible_d2 = true
+      var antiplayer;
+      //finds antiplayer
+      if (player == "0") {
+        antiplayer = "x"
+      } else if (player == "x") {
+        antiplayer = "0"
+      }
+      //loops from 0-2 (inclusive)
+      for (var a = 0; a < 3; a++) {
+        var count0s_col = 0
+        var possible_col = true
+        var count0s_row = 0
+        var possible_row = true
+        //checks 1st diagonal(top left to bottom right)
+        if (board[a][a] == player) {
+          count0s_d1++
+        } else if (board[a][a] == antiplayer) {
+          possible_d1 = false
+        }
+        //checks 2nd diagonal(bottom left to top right)
+        if (board[2 - a][a] == player) {
+          count0s_d2++
+        } else if (board[2 - a][a] == antiplayer) {
+          possible_d2 = false
+        }
+        //loops through 0-2(inclusive)
+        for (var b = 0; b < 3; b++) {
+          //checks columns
+          if (board[a][b] == player) {
+            count0s_row++
+          } else if (board[a][b] == antiplayer) {
+            possible_row = false
+          }
+          //checks rows
+          if (board[b][a] == player) {
+            count0s_col++
+          } else if (board[b][a] == antiplayer) {
+            possible_col = false
+          }
+        }
+        //checks for win
+        if (count0s_col == 2 && possible_col || count0s_row == 2 && possible_row || count0s_d1 == 2 && possible_d1 && a == 2 || count0s_d2 == 2 && possible_d2 && a == 2) {
+          //find type of win and which column or row it is in
+          if (count0s_col == 2 && possible_col) {
+            typeofwin = "column"
+            possitionofwin = a
+          } else if (count0s_row == 2 && possible_row) {
+            typeofwin = "row"
+            possitionofwin = a
+          } else if (count0s_d1 == 2 && possible_d1) {
+            typeofwin = "diagonal1"
+          } else if (count0s_d2 == 2 && possible_d2) {
+            typeofwin = "diagonal2"
+          }
+          //finds position in which to place nought
+          for (var c = 0; c < 3; c++) {
+            if (typeofwin == "column" && board[c][possitionofwin] == "1") {
+              winposition = [c, possitionofwin]
+            } else if (typeofwin == "row" && board[possitionofwin][c] == "1") {
+              winposition = [possitionofwin, c]
+            } else if (typeofwin == "diagonal1" && board[c][c] == "1") {
+              winposition = [c, c]
+            } else if (typeofwin == "diagonal2" && board[2 - c][c] == "1") {
+              winposition = [2 - c, c]
+            }
+          }
+          // returns values
+          result = true
+          return [true, winposition[0], winposition[1]]
+          break
+        }
+      }
+      return [result]
+    }
+    //checks for a nought on the board
+    var noughtonboard = function(board0) {
+      //nobt = nought on board test
+      var nobt = false
+      //loops through rows
+      for (var d = 0; d < 3; d++) {
+        //loops through each coloumn on row
+        for (var f = 0; f < 3; f++) {
+          //checks for nought
+          if (board0[d][f] == "0") {
+            nobt = true
+          }
+        }
+      }
+      return nobt
+    }
+    //counts number of ways to win with move and considering board1
+    var options = function(board1, move) {
+      var nooptions = 0
+      var column_test = true
+      var row_test = true
+      var diagonal1_test = true
+      var diagonal2_test = true
+      //if summove = 2 then the move lies on diagonal 2
+      //if summove = 0,4 then lies on diagonal 1
+      //don't need to check center as it is higher in the steps for victory
+      var summove = move[0] + move[1]
+      //checks for x's in the column, row and diagonals of move
+      for (var e = 0; e < 3; e++) {
+        if (board1[move[0]][e] == "x") {
+          row_test = false
+        }
+        if (board1[e][move[1]] == "x") {
+          column_test = false
+        }
+        if (summove == 2 && board1[2 - e][e] == "x") {
+          diagonal2_test = false
+        }
+        if ((summove == 0 || summove == 4) && board1[e][e] == "x") {
+          diagonal1_test = false
+        }
+      }
+      //counts number of options using row, column, diagonal1 and diagonal2 tests
+      if (row_test) {
+        nooptions++
+      }
+      if (column_test) {
+        nooptions++
+      }
+      if ((summove == 0 || summove == 4) && diagonal1_test) {
+        nooptions++
+      }
+      if (summove == 2 && diagonal2_test) {
+        nooptions++
+      }
+      return nooptions
+    }
+
+    // finds empty locations
+    var findempty = function(board2) {
+      var result0 = [];
+      //loops through each row
+      for (var g = 0; g < 3; g++) {
+        //loops through each cloumn in row
+        for (var h = 0; h < 3; h++) {
+          //checks if it's empty and adds it to result0 array
+          if (board2[g][h] == "1") {
+            result0.push([g, h])
+          }
+        }
+      }
+      // returns array of positions which are empty
+      return result0
+    }
+    //finds position with most options boardering most noughts
+    var mostoption0 = function(board3) {
+      var empty = findempty(board3)
+      var boardering = []
+      var options0 = []
+      //loops through each empty position
+      for (var i = 0; i < empty.length; i++) {
+        var tempboardering = 0
+        //loops through a 3x3 grid with the empty position in center
+        for (var j = -1; j < 2; j++) {
+          for (var k = -1; k < 2; k++) {
+            //makes sure it's not looking outside the arrays
+            if (empty[i][0] + j >= 0 && empty[i][1] + k >= 0 && empty[i][0] + j <= 2 && empty[i][1] + k <= 2) {
+              //counts the number of 0's it boarders with
+              if (board3[empty[i][0] + j][empty[i][1] + k] == "0") {
+                tempboardering++
+              }
+            }
+          }
+        }
+        //makes an array of options and an array of boardering with each value represnting an empty square
+        options0.push(options(board3, empty[i]))
+        boardering.push(tempboardering)
+      }
+      var maxoptions = -1
+      //finds the maximum number of options a move has
+      for (var l = 0; l < empty.length; l++) {
+        if (options0[l] > maxoptions) {
+          maxoptions = options0[l]
+        }
+      }
+      //finds each empty square with that many options
+      var potentialplaces = []
+      for (var m = 0; m < empty.length; m++) {
+        if (options0[m] == maxoptions) {
+          potentialplaces.push([boardering[m], m])
+        }
+      }
+      var idealposition = 0
+      var maxboarders = -1
+      var tempboard2 = board3
+      //loops through each move with max options
+      for (var n = 0; n < potentialplaces.length; n++) {
+        //makes sure it's not creating an opurtunity for a fork
+        tempboard2[empty[potentialplaces[n][1]][0]][empty[potentialplaces[n][1]][1]] = "0"
+        var check = checkfork(tempboard2, "x")
+        //finds square that has max options and max boarders with other 0's
+        if (potentialplaces[n][0] > maxboarders && (check[0] == false)) {
+          maxboarders = potentialplaces[n][0]
+          idealposition = potentialplaces[n][1]
+        }
+        tempboard2[empty[potentialplaces[n][1]][0]][empty[potentialplaces[n][1]][1]] = "1"
+      }
+      //return the ideal move
+      return empty[idealposition]
+    }
+    //cehcks for a fork
+    var checkfork = function(board4, player0) {
+      var empty0 = findempty(board4)
+      var tempboard = board4
+      var noforks = 0
+      var result2;
+      var test0 = true
+      //loops through every empty square
+      for (var o = 0; o < empty0.length; o++) {
+        tempboard[empty0[o][0]][empty0[o][1]] = player0
+        //counts the ways to win for player if they were to go in that square
+        if (waystowin(tempboard, player0) >= 2) {
+          test0 = false
+          noforks++
+          result2 = [true, empty0[o][0], empty0[o][1]]
+        }
+        tempboard[empty0[o][0]][empty0[o][1]] = "1"
+      }
+      //if there isn't any fork or more that one it'll return false nad number of forks
+      if (test0 || noforks > 1) {
+        return [false, noforks]
+        //otherwise it'll retrun true and co-ordodinates of block fork
+      } else {
+        //result2 = [true, empty0[o][0], empty0[o][1]]
+        return result2
+      }
+    }
+    //count they ways a player can win ona  given board
+    var waystowin = function(board5, player1) {
+      var empty1 = findempty(board5)
+      var nowins = 0
+      var tempboard1 = board5
+      //loops through each empty space
+      for (var p = 0; p < empty1.length; p++) {
+        //places that playes marker on that space
+        tempboard1[empty1[p][0]][empty1[p][1]] = player1
+        //checks if they have one
+        if (checkwin(tempboard1)[0]) {
+          //adds one to the number of ways a player can win
+          nowins++
+        }
+        //removes their marker
+        tempboard1[empty1[p][0]][empty1[p][1]] = "1"
+      }
+      //returns the number of ways a player can win
+      return nowins
+    }
+    //checks if and who won
+    var checkwin = function(board6) {
+      //check rows
+      var finaltest = false
+      var winner = ""
+      //loops through the numbers 0-2(inclusive)
+      for (var q = 0; q < 3; q++) {
+        //if the marker in each row of the same coloum is the same and not empty then:
+        if (board6[q][0] == board6[q][1] && board6[q][2] == board6[q][0] && board6[q][0] != "1") {
+          //set finaltest to true and make the winner the winner
+          finaltest = true
+          winner = board6[q][0]
+          //if the marker in each coloumn of the same row is the same and not empty them:
+        } else if (board6[0][q] == board6[1][q] && board6[2][q] == board6[0][q] && board6[0][q] != "1") {
+          //set finaltest to true and make the winner the winner
+          finaltest = true
+          winner = board6[0][q]
+        }
+      }
+      //checks diagonals
+      if ((board6[0][0] == board6[1][1] && board6[1][1] == board6[2][2] && board6[0][0] != "1") || (board6[0][2] == board6[1][1] && board6[1][1] == board6[2][0] && board6[0][2] != "1")) {
+        //set finaltest to true and make the winner the winner
+        finaltest = true
+        winner = board6[1][1]
+      }
+      // returns if someone one and who
+      var result1 = [finaltest]
+      if (finaltest) {
+        result1.push(winner)
+      }
+      return result1
+    }
+    //draws the winning line
+    var drawwinline = function(no, winner, completion) {
+      //#1-3(inclusive) = coloumns 1 on left 3 on right
+      //#4-6(inclusive) = rows 4 on top 6 on bottom
+      //#7 = top left to bottom right
+      //#8 = top right to bottom left
+      //sets colour of line
+      var linecolour;
+      if (winner == "x") {
+        ctx.strokeStyle = crosscolour
+      } else {
+        ctx.strokeStyle = noughtcolour
+      }
+      //sets thickness of line
+      ctx.lineWidth = markerthickness
+      ctx.beginPath()
+      ctx.lineCap = "round"
+      //draws line
+      if (no <= 3) {
+        ctx.moveTo(w / 2 + ((shortest / 3) * (no - 2)), h / 2 - (shortest - gap) / 2)
+        ctx.lineTo(w / 2 + ((shortest / 3) * (no - 2)), h / 2 + (((shortest - gap) / 2)) * ((completion * 2) - 1))
+        ctx.stroke()
+      } else if (no <= 6) {
+        ctx.moveTo(w / 2 - ((shortest - gap) / 2), h / 2 + (shortest / 3) * (no - 5))
+        ctx.lineTo(w / 2 + (((shortest - gap) / 2)) * ((completion * 2) - 1), h / 2 + (shortest / 3) * (no - 5))
+        ctx.stroke()
+      } else if (no == 7) {
+        ctx.moveTo(w / 2 - ((shortest - (gap * 2)) / 2), h / 2 - (shortest - (gap * 2)) / 2)
+        ctx.lineTo(w / 2 + (((shortest - (gap * 2)) / 2)) * ((completion * 2) - 1), (h / 2 + (((shortest - (gap * 2)) / 2)) * ((completion * 2) - 1)))
+        ctx.stroke()
+      } else if (no == 8) {
+        ctx.moveTo(w / 2 - ((shortest - (gap * 2)) / 2), h / 2 + (shortest - (gap * 2)) / 2)
+        ctx.lineTo(w / 2 + (((shortest - (gap * 2)) / 2)) * ((completion * 2) - 1), (h / 2 - (((shortest - (gap * 2)) / 2)) * ((completion * 2) - 1)))
+        ctx.stroke()
+      }
+    }
+    //draws empty game board looks like a hashtag #
+    var drawgameboard = function() {
+      //sets colour and thickness
+      ctx.strokeStyle = boardcolour
+      ctx.lineWidth = boardthickness
+      ctx.beginPath()
+      //makes edges round
+      ctx.lineCap = "round"
+      //right vertical line
+      ctx.moveTo((w / 2) + shortest / 6, (h / 2) - (shortest / 2))
+      ctx.lineTo((w / 2) + shortest / 6, (h / 2) + (shortest / 2))
+      //left vertical line
+      ctx.moveTo((w / 2) - shortest / 6, (h / 2) - (shortest / 2))
+      ctx.lineTo((w / 2) - (shortest / 6), (h / 2) + (shortest / 2))
+      //top horizontal line
+      ctx.moveTo((w / 2) - shortest / 2, (h / 2) - (shortest / 6))
+      ctx.lineTo((w / 2) + (shortest / 2), (h / 2) - (shortest / 6))
+      //bottom horizontal line
+      ctx.moveTo((w / 2) - shortest / 2, (h / 2) + (shortest / 6))
+      ctx.lineTo((w / 2) + (shortest / 2), (h / 2) + (shortest / 6))
+      ctx.stroke()
+      ctx.closePath()
+      ctx.fillStyle = boardcolour
+      ctx.font = "20px Impact"
+      ctx.textAlign = "right"
+      ctx.fillText("Music: www.bensound.com", w, h - 5)
+    }
+    //draws a nought at boardx, boardy with a transparency of alpha2
+    var drawnought = function(boardy, boardx, alpha2) {
+      //sets colour
+      ctx.strokeStyle = converttorgba(noughtcolour, alpha2)
+      //converts co-ordodinates into a eaiser for to use
+      var boardy0 = boardy - 1
+      var boardx0 = boardx - 1
+      ctx.lineWidth = markerthickness
+      ctx.beginPath()
+      //draws nought
+      ctx.arc((w / 2) + (boardx0 * (shortest / 3)), (h / 2) + (boardy0 * (shortest / 3)), (shortest / 6) - markerbuffer, 0, Math.PI * 2)
+      ctx.closePath()
+      ctx.stroke()
+    }
+    //draws cross at crossx and crossy
+    var drawcross = function(crossy, crossx) {
+      //find center of cross
+      var centerx = (w / 2) + ((crossx - 1) * (shortest / 3))
+      var centery = (h / 2) + ((crossy - 1) * (shortest / 3))
+      //sets properties of lines
+      ctx.lineWidth = markerthickness
+      ctx.strokeStyle = crosscolour
+      ctx.beginPath()
+      ctx.lineCap = "round"
+      //Diagonal2
+      ctx.moveTo(centerx - (shortest / 6) + markerbuffer, centery + (shortest / 6) - markerbuffer)
+      ctx.lineTo(centerx + (shortest / 6) - markerbuffer, centery - (shortest / 6) + markerbuffer)
+      //Diagonal1
+      ctx.moveTo(centerx - (shortest / 6) + markerbuffer, centery - (shortest / 6) + markerbuffer)
+      ctx.lineTo(centerx + (shortest / 6) - markerbuffer, centery + (shortest / 6) - markerbuffer)
+      ctx.stroke()
+    }
+    //draws players on the board
+    var drawplayers = function(board7) {
+      //loops through rows
+      for (var r = 0; r < 3; r++) {
+        //loops through each coloumn in row
+        for (var s = 0; s < 3; s++) {
+          //if it's a nought draw a nought
+          if (board7[r][s] == "0") {
+            drawnought(r, s, 1)
+            //if it's a cross draw a cross
+          } else if (board7[r][s] == "x") {
+            drawcross(r, s)
+          }
+        }
+      }
+    }
+    //runs when the player clicks
+    window.addEventListener("click", function(e) {
+      if (started) {
+        var clickx = e.x
+        var clicky = e.y
+        //converts click co-ordodinates into gridx and gridy co-ordodinates
+        gridx = converttogrid(clickx, w / 2)
+        gridy = converttogrid(clicky, h / 2)
+        //checks if the player can place marker, if the square is empty and if the outcome is determinded
+        if (currentboard[gridy][gridx] == "1" && canplacemarker && outcome == "none") {
+          //marks the square
+          currentboard[gridy][gridx] = "x"
+          turn = "0"
+        }
+        if (canreset) {
+          reset()
+        }
+      } else {
+        started = true
+        backgroundmusic.play()
+      }
+    })
+    window.addEventListener("keydown", function(e) {
+      if (canreset) {
+        reset()
+      }
+      if (e.keyCode == 77) {
+        if (muted) {
+          backgroundmusic.play()
+          muted = false
+        } else {
+          backgroundmusic.pause()
+          muted = true
+        }
+      }
+    })
+    //will run when the player resizes the window
+    window.addEventListener("resize", function(e) {
+      //re-define all the variables which are affected
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      w = canvas.width
+      h = canvas.height
+      shortest = h
+      if (w < h) {
+        shortest = w
+      }
+      shortest -= boardmargin
+      gap = shortest / 20
+      canreset = false
+      markerbuffer = shortest / 15
+      markerthickness = shortest / 25
+      boardthickness = shortest / 30
+    })
+    //converts a co-ordodinates into a grid corodinate
+    var converttogrid = function(coord, center0) {
+      if (coord > center0 + shortest / 6) {
+        return 2
+      } else if (coord > center0 - shortest / 6) {
+        return 1
+      } else {
+        return 0
+      }
+    }
+    //counts the number of empty squares on the board
+    var countempty = function(board8) {
+      var result3 = 0
+      //loops through each row
+      for (var t = 0; t < 3; t++) {
+        //loops through each coloumn in row
+        for (var u = 0; u < 3; u++) {
+          //if it's empty add 1 to result
+          if (board8[t][u] == "1") {
+            result3++
+          }
+        }
+      }
+      //returns result
+      return result3
+    }
+    //updates game
+    //gets run 60 times per second
+    var update = function() {
+      //redraws background
+      ctx.fillStyle = backgroundcolour
+      ctx.fillRect(0, 0, w, h)
+      //draws small boards
+      if (outcome == "none") {
+        managesmall()
+      }
+      //draws board and existing players
+      drawgameboard()
+      drawplayers(currentboard)
+      //decreases waits
+      decreasewaits()
+      //draws nought animation
+      noughtanimation()
+      //checks for a win
+      activatewinorloss()
+      //draws wining line
+      winningline()
+      //checks for draw
+      activatedraw()
+      //draws the drawanimation
+      dodrawanimation()
+      //draws loss animation
+      dolossanimation()
+      //does the next turn
+      doturn()
+      if (outcome != "none") {
+        managesmall()
+      }
+      if (started == false) {
+        ctx.fillStyle = noughtcolour
+        //ctx.fillRect((w/2)-(shortest/3)-markerbuffer,(h/2)-(shortest/3)-markerbuffer,(w/2)+(shortest/3)+markerbuffer,(h/2)+(shortest/3)+markerbuffer)
+        ctx.fillRect((w / 2) - (shortest / 3) - markerbuffer, (h / 2) - (shortest / 3) - markerbuffer, (shortest / 3) * 2 + markerbuffer * 2, (shortest / 3) * 1.75)
+        ctx.fillStyle = "#000000"
+        //ctx.fillRect(w/2,h/2,w,h)
+        ctx.fillStyle = crosscolour
+        ctx.font = shortest / 3 + "px Impact"
+        ctx.textAlign = "center"
+        ctx.fillText("Start", w / 2, h / 2)
+      }
+      requestAnimationFrame(update)
+    }
+    //very simmilar to checkwin
+    var whatwin = function(board9) {
+      var test1 = false
+      //loops through numbers 0-2(inclusive)
+      for (var v = 0; v < 3; v++) {
+        //checks coloums if somebody won
+        if (board9[0][v] == board9[1][v] && board9[2][v] == board9[0][v] && board9[0][v] != "1" && !test1) {
+          return [true, v + 1, board9[0][v]]
+          test1 = true
+          break
+          //checks rows if sombody won
+        } else if (board9[v][0] == board9[v][1] && board9[v][2] == board9[v][0] && board9[v][0] != "1" && !test1) {
+          return [true, v + 4, board9[v][0]]
+          test1 = true
+          break
+        }
+      }
+      //checks diagonal 1
+      if (board9[0][0] == board9[1][1] && board9[1][1] == board9[2][2] && board9[1][1] != "1" && !test1) {
+        return [true, 7, board9[1][1]]
+        test1 = true
+        //cehcks diagonal2
+      } else if (board9[2][0] == board9[1][1] && board9[1][1] == board9[0][2] && board9[1][1] != "1" && !test1) {
+        return [true, 8, board9[1][1]]
+        test1 = true
+      }
+      //returns result
+      if (test1 == false) {
+        return [false]
+      }
+    }
+    //draws the draw sceen (strong is the transparency)
+    var drawdraw = function(strong) {
+      ctx.fillStyle = converttorgba(backgroundcolour, strong)
+      ctx.fillRect(0, 0, w, h)
+      ctx.textAlign = "center"
+      ctx.font = (shortest / 3) + "px Impact"
+      ctx.fillStyle = converttorgba(boardcolour, strong)
+      ctx.fillText("Draw", w / 2, h / 2)
+      ctx.font = (shortest / 12) + "px Impact"
+      ctx.fillText("Number of Draws: " + nodraws.toString(), (w / 4) * 2, h / 2 + (shortest / 6) * 2)
+      ctx.fillText("Number of Losses: " + nolosses.toString(), (w / 4), h / 2 + (shortest / 6))
+      ctx.fillText("Number of Wins: " + nowins.toString(), (w / 4) * 3, h / 2 + (shortest / 6) * 3)
+
+    }
+    //draws the loss screen (strong0 is the transparency)
+    var drawloss = function(strong0) {
+      ctx.fillStyle = converttorgba(noughtcolour, strong0)
+      ctx.fillRect(0, 0, w, h)
+      ctx.textAlign = "center"
+      ctx.font = (shortest / 5.5) + "px Impact"
+      ctx.fillStyle = converttorgba(boardcolour, strong0)
+      ctx.fillText("You Lose", w / 2, h / 2)
+      ctx.font = (shortest / 12) + "px Impact"
+      ctx.fillText("Number of Draws: " + nodraws.toString(), (w / 4) * 2, h / 2 + (shortest / 6) * 2)
+      ctx.fillText("Number of Losses: " + nolosses.toString(), (w / 4), h / 2 + (shortest / 6))
+      ctx.fillText("Number of Wins: " + nowins.toString(), (w / 4) * 3, h / 2 + (shortest / 6) * 3)
+    }
+    //converts an rgb value to a rgba value
+    var converttorgba = function(colour, alpha) {
+      result4 = "rgba(" + colour.slice(4, colour.indexOf(",")) + "," + colour.slice((colour.indexOf(",") + 1), colour.lastIndexOf(",")) + "," + colour.slice((colour.lastIndexOf(",") + 1), -1) + "," + alpha + ")"
+      return result4
+    }
+    //draws a single smallboard
+    var drawsmallboard = function(boardx, boardy, rotation, squaresize, alpha0) {
+      //sets colour
+      ctx.strokeStyle = converttorgba(complementcolour, alpha0)
+      //finds rotations in radians
+      var radian = (rotation / 360) * (Math.PI * 2)
+      //moves origon to center of board
+      ctx.translate(boardx, boardy)
+      //rotates canvas radian radians
+      ctx.rotate(radian)
+      //sets style of lines
+      ctx.lineWidth = squaresize / 2
+      ctx.lineCap = "round"
+      //draws lines
+      ctx.beginPath()
+      ctx.moveTo(squaresize / -2, -1.5 * (squaresize))
+      ctx.lineTo(squaresize / -2, 1.5 * (squaresize))
+      ctx.moveTo(squaresize / 2, -1.5 * (squaresize))
+      ctx.lineTo(squaresize / 2, 1.5 * (squaresize))
+      ctx.moveTo(-1.5 * (squaresize), squaresize / 2)
+      ctx.lineTo(1.5 * (squaresize), squaresize / 2)
+      ctx.moveTo(-1.5 * (squaresize), squaresize / -2)
+      ctx.lineTo(1.5 * (squaresize), squaresize / -2)
+      ctx.stroke()
+      //rotates back to origonal
+      ctx.rotate(-radian)
+      //translates origin back to the top left corner
+      ctx.translate(-boardx, -boardy)
+    }
+    //draws all the small boards
+    var drawminiboards = function(miniboards) {
+      //loops through each board
+      for (var w = 0; w < (miniboards.length / infolength); w++) {
+        //sets transparency of board
+        var alpha1 = 1 - (miniboards[(w * infolength) + 3] / boardlifespan)
+        if (alpha1 > 1) {
+          alpha1 = 1
+        } else if (alpha1 < 0) {
+          alpha1 = 0
+        }
+        //draws the board
+        drawsmallboard(miniboards[(w * infolength)], miniboards[(w * infolength) + 1], miniboards[(w * infolength) + 2], smallboardsize, alpha1)
+      }
+    }
+    //ages all the small boards
+    var agesmallboards = function() {
+      var tobespliced = []
+      //loops through each small board
+      for (var x = 0; x < smallboards.length / infolength; x++) {
+        //makes it fall
+        smallboards[(x * infolength) + 1] += y_velocity
+        //changes it's roation by it's roational velocity
+        smallboards[(x * infolength) + 2] += smallboards[(x * infolength) + 4]
+        //makes it older
+        smallboards[(x * infolength) + 3] += 1
+        //if it's too old it wiil be added to tobespliced
+        if (smallboards[(x * infolength) + 3] > boardlifespan) {
+          tobespliced.push(x * infolength)
+        }
+      }
+      //will remove all boards who are too old
+      for (var z = 0; z < tobespliced.length; z++) {
+        smallboards.splice(tobespliced[z], 5)
+      }
+    }
+    //creates new miniboard
+    var createnewboard = function() {
+      smallboards.push(Math.floor(Math.random() * (w - (smallboardsize * 6)))) //x position
+      smallboards.push(smallboardsize * -3) //y position
+      smallboards.push(Math.random() * 360) //starting rotation
+      smallboards.push(0) //age
+      smallboards.push((Math.random() * (maxspin * 2)) - maxspin) //rotational velocity
+    }
+    createnewboard()
+    //does everything for the small boards
+    var managesmall = function() {
+      //makes a new one if they hasn't been one for some time
+      if (timesincelast > (boardlifespan / maxnosmallboard) && Math.random() >= 0.75 && smallboards.length / infolength < maxnosmallboard) {
+        createnewboard()
+        timesincelast = 0
+      }
+      timesincelast++
+      //ages the boards
+      agesmallboards()
+      //draws the boards
+      drawminiboards(smallboards)
+    }
+    //decreases the waits for the animations
+    var decreasewaits = function() {
+      if (wait > 0) {
+        wait -= 1
+      }
+      if (losswait > 0 && winlineanimate == 100) {
+        losswait -= 1
+      }
+    }
+    //does the nougth animation
+    var noughtanimation = function() {
+      //if the wait time has expired and the player can't place a marker then:
+      if (!canplacemarker && wait == 0) {
+        //draw nought
+        drawnought(animatepos[0], animatepos[1], animatestep)
+        //nought fade in speed
+        animatestep += 0.1
+        //if animation finished
+        if (animatestep >= 0.98) {
+          //allow player to place marker
+          canplacemarker = true
+          //make the 0 on the board
+          currentboard[animatepos[0]][animatepos[1]] = "0"
+        }
+      }
+    }
+    //checks for a winner and activates animation
+    var activatewinorloss = function() {
+      var cw = checkwin(currentboard)
+      //if somebody's won and the outcome hasn't been chenged yet
+      if (cw[0] && outcome == "none") {
+        //and the winner is the computor
+        if (cw[1] == "0") {
+          //changes local storage value by 1
+          nolosses++
+          localStorage.setItem("losses", nolosses)
+          //change some variables
+          outcome = "loss"
+          lossanimatestep = lossanimatetime
+          winlineanimate = 0
+          losswait = losswaittime
+        } else if (cw[1] == "x") {
+          //this hopefully will never happen
+          //changes local storage value by 1
+          nowins++
+          localStorage.setItem("wins", nowins)
+        }
+      }
+    }
+    //does the winning line
+    var winningline = function() {
+      var ww = whatwin(currentboard)
+      //if somebody's won and the win line hasn't finished
+      if (ww[0] && lossanimatestep != 0 && winlineanimate != 100) {
+        outcome = "loss"
+        //draw winline
+        drawwinline(ww[1], ww[2], winlineanimate / 100)
+        //and advance win line
+        winlineanimate += winlinespeed
+      }
+      //if the outcome is lost and the winline is done
+      if (outcome == "loss" && winlineanimate == 100) {
+        //draw fully completed winline
+        drawwinline(ww[1], ww[2], 1)
+      }
+    }
+    //initiates draw
+    var activatedraw = function() {
+      //makes there are no empty places and no outcome then:
+      if (countempty(currentboard) == 0 && outcome == "none") {
+        //changes number of draws by 1
+        nodraws++
+        localStorage.setItem("draws", nodraws)
+        //set the outcome to draw
+        outcome = "draw"
+        drawanimatestep = 80
+      }
+    }
+    //does the draw animation
+    var dodrawanimation = function() {
+      //if the outcome is draw
+      if (outcome == "draw") {
+        //draw the draw screen
+        drawdraw(1 - ((1 / 80) * drawanimatestep))
+        drawanimatestep -= 1
+        //allows the player to reset
+        if (drawanimatestep < 1) {
+          canreset = true
+        }
+      }
+    }
+    //does the loss animation
+    var dolossanimation = function() {
+      //if the player has lost:
+      if (outcome == "loss" && losswait == 0) {
+        //decrease loss animate step
+        if (lossanimatestep > 0) {
+          lossanimatestep -= lossanimatespeed
+        }
+        //draw the loss screen
+        drawloss(1 - ((1 / 80) * lossanimatestep))
+        //allows the player to reset when done
+        if (lossanimatestep == 0) {
+          canreset = true
+        }
+      }
+    }
+    //if does the computors turn if it is it's turn
+    var doturn = function() {
+      //if it's the computors turn
+      if (turn == "0" && countempty(currentboard) > 0 && outcome == "none") {
+        //find where to go
+        var nextmovepos = nextmove(currentboard)
+        //play animation
+        wait = 50
+        animatepos = nextmovepos
+        animatestep = 0
+        turn = "x"
+        canplacemarker = false
+      }
+    }
+    update()
+  </script>
+</body>
+
+</html>
