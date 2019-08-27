@@ -97,9 +97,9 @@
     //where n%5 == 0
     var smallboards = []
     var maxnosmallboard = 20
-    var smallboardsize = 15
+    var smallboardsize = shortest/35
     var boardlifespan = 150
-    var y_velocity = 1
+    var y_velocity = shortest/500
     var maxspin = 2
     var infolength = 5
     var timesincelast = 0
@@ -154,6 +154,7 @@
     }
     reset()
     var backgroundmusic = new Audio("bensound-deepblue.mp3")
+    backgroundmusic.loop = true
     //will find the nearly ideal move
     var nextmove = function(gameboard) {
       var finalresult = [];
@@ -686,8 +687,10 @@
       if (w < h) {
         shortest = w
       }
+      smallboardsize = shortest/35
       shortest -= boardmargin
       gap = shortest / 20
+      y_velocity = shortest/500
       canreset = false
       markerbuffer = shortest / 15
       markerthickness = shortest / 25
